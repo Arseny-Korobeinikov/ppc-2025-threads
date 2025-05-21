@@ -18,7 +18,7 @@ struct PerfResults {
   // measurement of task's time (in seconds)
   double time_sec = 0.0;
   enum TypeOfRunning : uint8_t { kPipeline, kTaskRun, kNone } type_of_running = kNone;
-  constexpr static double kMaxTime = 10.0;
+  constexpr static double kMaxTime = 30.0;
 };
 
 class Perf {
