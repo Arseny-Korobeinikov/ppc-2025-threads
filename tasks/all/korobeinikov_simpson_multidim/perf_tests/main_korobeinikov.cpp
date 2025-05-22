@@ -15,8 +15,10 @@ double TestFunction_1(const korobeinikov_simpson_multidim::Coordinate &coord) {
   return coord[0] + coord[1] + coord[2] + coord[3] + coord[4];
 }
 
-TEST(stl_korobeinikov_perf_test, test_task_run) {
+TEST(all_korobeinikov_perf_test, test_task_run) {
   using namespace korobeinikov_simpson_multidim;
+  boost::mpi::communicator world;
+
   // Input data
   std::vector<Bound> bounds = {
       {.lo = 0., .hi = 1.}, {.lo = 0., .hi = 1.}, {.lo = 0., .hi = 1.},
@@ -25,16 +27,22 @@ TEST(stl_korobeinikov_perf_test, test_task_run) {
   IntegrandFunction func = &TestFunction_1;
   std::size_t approxs = 18;
 
-  auto task_data = std::make_shared<ppc::core::TaskData>();
-  task_data->inputs = {reinterpret_cast<uint8_t *>(bounds.data()), reinterpret_cast<uint8_t *>(func),
-                       reinterpret_cast<uint8_t *>(&approxs)};
-  task_data->inputs_count.emplace_back(bounds.size());
-
-  task_data->outputs.resize(1);
+  // Output data
   double result = 0.0;
-  task_data->outputs[0] = reinterpret_cast<uint8_t *>(&result);
-  task_data->outputs_count.push_back(1);
 
+  auto task_data = std::make_shared<ppc::core::TaskData>();
+  if (world.rank() == 0) {
+    task_data->inputs = {reinterpret_cast<uint8_t *>(bounds.data()), reinterpret_cast<uint8_t *>(func),
+                         reinterpret_cast<uint8_t *>(&approxs)};
+    task_data->inputs_count.emplace_back(bounds.size());
+
+    task_data->outputs.resize(1);
+
+    task_data->outputs[0] = reinterpret_cast<uint8_t *>(&result);
+    task_data->outputs_count.push_back(1);
+  } else {
+    task_data->inputs = {reinterpret_cast<uint8_t *>(TestFunction_1)};
+  }
   auto task = std::make_shared<SimpsonTaskAll>(task_data);
 
   // Create Perf attributes
@@ -53,6 +61,9 @@ TEST(stl_korobeinikov_perf_test, test_task_run) {
   // Create Perf analyzer
   auto perf_analyzer = std::make_shared<ppc::core::Perf>(task);
   perf_analyzer->TaskRun(perf_attr, perf_results);
-  ppc::core::Perf::PrintPerfStatistic(perf_results);
-  EXPECT_NEAR(result, 1.5, 0.3);
+  if (world.rank() == 0) {
+    ppc::core::Perf::PrintPerfStatistic(perf_results);
+    EXPECT_NEAR(result, 1.5, 0.3);
+  }
+
 }
